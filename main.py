@@ -13,7 +13,6 @@ img_path3 = 'nails_segmentation/images/2c376c66-9823-4874-869e-1e7f5c54ec7b.jpg'
 img_path4 = 'nails_segmentation/images/4c4a0dd6-e402-11e8-97db-0242ac1c0002.jpg'
 img_path5 = 'nails_segmentation/images/d60a5f06-db67-11e8-9658-0242ac1c0002.jpg'
 
-
 def extractSkin(image):
 
     img = image.copy()
@@ -38,7 +37,7 @@ def extractSkin(image):
 
 
 # specify different path to try another image
-image = cv2.imread(img_path5)
+image = cv2.imread(img_path1)
 
 cv2.imshow('image', image)
 cv2.waitKey(0); cv2.destroyAllWindows()
