@@ -1,12 +1,16 @@
 import cv2
 import numpy as np
 import sys
+from os import listdir
+from os.path import isfile, join
 
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib import colors
 import matplotlib.pyplot as plt
 
+mypath = 'nails_segmentation/images/'
+images = [f for f in listdir(mypath) if isfile(join(mypath, f))]
 img_path1 = 'nails_segmentation/images/1eecab90-1a92-43a7-b952-0204384e1fae.jpg'
 img_path2 = 'nails_segmentation/images/2C29D473-CCB4-458C-926B-99D0042161E6.jpg'
 img_path3 = 'nails_segmentation/images/2c376c66-9823-4874-869e-1e7f5c54ec7b.jpg'
@@ -32,19 +36,11 @@ def extractSkin(image):
     # Extracting skin from the threshold mask
     skin = cv2.bitwise_and(img, img, mask=mask)
 
+    # contours, hierarychy = cv2.findContours
+
     # return image of skin
     return cv2.cvtColor(skin, cv2.COLOR_HSV2BGR)
 
-
-# specify different path to try another image
-image = cv2.imread(img_path1)
-
-cv2.imshow('image', image)
-cv2.waitKey(0); cv2.destroyAllWindows()
-
-cv2.imshow("skin", extractSkin(image))
-cv2.waitKey(0); cv2.destroyAllWindows()
-sys.exit()
 
 # INPUT: image in BGR
 # OUTPUT: 3D plot of RGB color space
@@ -89,3 +85,44 @@ def plot_hsv_3d(image):
 
     cv2.waitKey()
     cv2.destroyAllWindows()
+
+
+def extractSkin2(image):
+    img = image.copy()
+    # convert from BGR (opencv defatult) to HSV
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+    v = img[:,:,2]
+
+    # fixed V (?)
+    img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
+    rows,cols,pix = img.shape
+    for i in range(rows):
+        for j in range(cols):
+            img[i,j] = img[i,j] * (v[i][j] / 255)
+            
+    # cv2.imshow('fixed v', img)
+    # cv2.waitKey(0); cv2.destroyAllWindows()
+
+    # Applying Otsu's method setting the flag value into cv.THRESH_OTSU.
+    # Use a bimodal image as an input.
+    # Optimal threshold value is determined automatically.
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    otsu_threshold, otsu_img = cv2.threshold(
+        img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU,
+    )
+
+    # print("Obtained threshold: ", otsu_threshold)
+    # cv2.imshow("otsu", otsu_img)
+    # cv2.waitKey(0); cv2.destroyAllWindows()
+
+    # return image of skin
+    return otsu_img
+
+
+for image in images:
+    img = cv2.imread(mypath + image)
+    cv2.imshow("img", extractSkin(img))
+    cv2.waitKey(0); cv2.destroyAllWindows()
+
+sys.exit()
