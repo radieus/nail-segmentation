@@ -37,6 +37,14 @@ def extractSkin(image):
 
     img = image.copy()
     # convert from BGR (opencv defatult) to HSV
+    R, G, B = cv2.split(img)
+
+    output1_R = cv2.equalizeHist(R)
+    output1_G = cv2.equalizeHist(G)
+    output1_B = cv2.equalizeHist(B)
+
+    equ = cv2.merge((output1_R, output1_G, output1_B))
+
     img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
     # get HSV thresholds for skin tone in HSV
@@ -65,12 +73,12 @@ def extractSkin(image):
     cv2.waitKey(0); cv2.destroyAllWindows()
 
 
-    contours,hierarchy = cv2.findContours(closing, 1, 2)
-    contours_sizes= [(cv2.contourArea(cnt), cnt) for cnt in contours]
-    biggest_contour = max(contours_sizes, key=lambda x: x[0])[1]
+    # contours,hierarchy = cv2.findContours(closing, 1, 2)
+    # contours_sizes= [(cv2.contourArea(cnt), cnt) for cnt in contours]
+    # biggest_contour = max(contours_sizes, key=lambda x: x[0])[1]
 
-    countours = biggest_contour
-    cv2.imshow("contours", np.array(contours))
+    # countours = biggest_contour
+    # cv2.imshow("contours", np.array(contours))
 
     #cv2.waitKey(0); cv2.destroyAllWindows()
     # Extracting skin from the threshold mask
@@ -211,6 +219,21 @@ def find_biggest_contour(image):
    cv2.drawContours(mask,[biggest_contour], -1, (0,255,0), 3)# 3=thickness, -1= draw all contours, 2nd arg must be a list 
    return biggest_contour, mask
 
+def contour(image):
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    ret, threshold = cv2.threshold(image, 10, 255, cv2.THRESH_BINARY)
+    contours, hierarchy = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    epsilon = 0.1 * cv2.arcLength(contours[0], True)
+    approx = cv2.approxPolyDP(contours[0], epsilon, True)
+
+    cv2.drawContours(image, approx, -1, (0, 255, 0), 3)
+    cv2.imshow("Contour", image)
+
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
 def extractSkin2(image):
     img = image.copy()
 
@@ -273,22 +296,39 @@ def thresh_callback(val, image):
 
     return drawing
 
+def bilateral_filtering(image):
+    # Converting the image to grayscale.
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Smoothing without removing edges.
+    gray_filtered = cv2.bilateralFilter(gray, 7, 50, 50)
+
+    # Applying the canny filter
+    edges = cv2.Canny(gray, 60, 120)
+    edges_filtered = cv2.Canny(gray_filtered, 60, 120)
+
+    # Stacking the images to print them together for comparison
+    images = np.hstack((gray, edges, edges_filtered))
+
+    # Display the resulting frame
+    cv2.imshow('Frame', images)
 
 # hsvTracker(img_path13)
 
 for image in images:
-    skin = cv2.imread(mypath + image)
-    cv2.imshow("skin", extractSkin(skin))
+    img = cv2.imread(mypath + image)
+    skin = extractSkin(img)
+    bilateral_filtering(skin)
+    # skin = extractSkin(img)
+    # cv2.imshow("skin", skin)
     cv2.waitKey(0); cv2.destroyAllWindows()
+    # contour(skin)
 
     # cv2.imshow("thresh", thresh_callback(100, skin))
     # cv2.waitKey(0); cv2.destroyAllWindows()
 
 
 sys.exit()
-
-
-
 
 # modify V values
 # rows,cols,pix = img.shape
