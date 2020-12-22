@@ -197,7 +197,7 @@ def hsvTracker(path):
 
     cv2.destroyAllWindows()
 
-
+# https://www.learnopencv.com/filling-holes-in-an-image-using-opencv-python-c/
 def flood_fill(image):
     # set values equal to or above 220 to 0
     # set values below 220 to 255
