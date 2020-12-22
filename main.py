@@ -4,21 +4,22 @@ import sys
 from os import listdir
 from os.path import isfile, join
 import random as rng
+from scipy.interpolate import splprep, splev
 
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib import colors
 import matplotlib.pyplot as plt
 
-mypath = 'nails_segmentation/images/'
-images = [f for f in listdir(mypath) if isfile(join(mypath, f))]
+images_dir = 'nails_segmentation/images/'
+images_names = [f for f in listdir(images_dir) if isfile(join(images_dir, f))]
+
+# some particular images
 img_path1 = 'nails_segmentation/images/1eecab90-1a92-43a7-b952-0204384e1fae.jpg'
 img_path2 = 'nails_segmentation/images/2C29D473-CCB4-458C-926B-99D0042161E6.jpg'
 img_path3 = 'nails_segmentation/images/2c376c66-9823-4874-869e-1e7f5c54ec7b.jpg'
 img_path4 = 'nails_segmentation/images/4c4a0dd6-e402-11e8-97db-0242ac1c0002.jpg'
 img_path5 = 'nails_segmentation/images/d60a5f06-db67-11e8-9658-0242ac1c0002.jpg'
-
-# no nails
 img_path6 = 'nails_segmentation/images/bf93c2e2-7b5f-4108-ae85-4ef68564d418.jpg'
 img_path7 = 'nails_segmentation/images/3493127D-7B19-4E50-94AE-2401BD2A91C8.jpg'
 img_path8 = 'nails_segmentation/images/09aefeec-e05f-11e8-87a6-0242ac1c0002.jpg'
@@ -33,22 +34,25 @@ img_path16 = 'nails_segmentation/images/a3a73edd-1483-4413-addb-9a7264b5d853.jpg
 img_path17 = 'nails_segmentation/images/d6072ec6-db67-11e8-9658-0242ac1c0002.jpg'
 img_path18 = 'nails_segmentation/images/d633f320-db67-11e8-9658-0242ac1c0002.jpg'
 
-def extractSkin(image):
-
-    img = image.copy()
-    # convert from BGR (opencv defatult) to HSV
+def equalizeHistogramRGB(image):
     R, G, B = cv2.split(img)
 
     output1_R = cv2.equalizeHist(R)
     output1_G = cv2.equalizeHist(G)
     output1_B = cv2.equalizeHist(B)
 
-    equ = cv2.merge((output1_R, output1_G, output1_B))
+    return cv2.merge((output1_R, output1_G, output1_B))
+
+def extractSkin(image):
+
+    img = image.copy()
+
+    # equ = equalizeHistogramRGB(img)
 
     img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
     # get HSV thresholds for skin tone in HSV
-    lower = np.array([0, 48, 80], dtype=np.uint8)
+    lower = np.array([0, 28, 80], dtype=np.uint8)
     upper = np.array([20, 255, 255], dtype=np.uint8)
 
     # img[:,:,2] = 180
@@ -64,32 +68,19 @@ def extractSkin(image):
     kopen = np.ones((3,3), dtype=np.uint8)
 
 
-    opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kopen, iterations=3)
-    cv2.imshow("opening", opening)
-    cv2.waitKey(0); cv2.destroyAllWindows()
-
-    closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kclose, iterations=6)
+    closing = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kclose, iterations=1)
     cv2.imshow("closing", closing)
     cv2.waitKey(0); cv2.destroyAllWindows()
 
-
-    # contours,hierarchy = cv2.findContours(closing, 1, 2)
-    # contours_sizes= [(cv2.contourArea(cnt), cnt) for cnt in contours]
-    # biggest_contour = max(contours_sizes, key=lambda x: x[0])[1]
-
-    # countours = biggest_contour
-    # cv2.imshow("contours", np.array(contours))
-
-    #cv2.waitKey(0); cv2.destroyAllWindows()
-    # Extracting skin from the threshold mask
+    # cv2.waitKey(0); cv2.destroyAllWindows()
+    # extracting skin from the threshold mask
     skin = cv2.bitwise_and(img, img, mask=closing)
 
     # return image of skin
     return cv2.cvtColor(skin, cv2.COLOR_HSV2BGR)
 
-
 # INPUT: image in BGR
-# OUTPUT: 3D plot of RGB color space
+# OUTPUT: 3D plot of RGB color space of an image
 def plot_rgb_3d(image):
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     plt.imshow(rgb_image)
@@ -113,7 +104,7 @@ def plot_rgb_3d(image):
     plt.show()
 
 # INPUT: image in BGR
-# OUTPUT: 3D plot of HSV color space
+# OUTPUT: 3D plot of HSV color space of an image
 def plot_hsv_3d(image):
     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     plt.imshow(hsv_image)
@@ -132,8 +123,10 @@ def plot_hsv_3d(image):
     cv2.waitKey()
     cv2.destroyAllWindows()
 
+# required for hsvTracker()
 def nothing(x):
     pass
+
 # INPUT: image in BGR
 # OUTPUT: window with tracking bars that allow to play with HSV channels
 def hsvTracker(path):
@@ -204,129 +197,98 @@ def hsvTracker(path):
 
     cv2.destroyAllWindows()
 
-def find_biggest_contour(image):
-   image = image.copy() 
-   #1
-   image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-   #2 
-   threshold = cv2.threshold(image_gray,127, 255,0)
-   #3
-   contours, hierarchy = cv2.findContours(threshold, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE) # countours is a python list
-   contours_sizes= [(cv2.contourArea(cnt), cnt) for cnt in contours]
-   biggest_contour = max(contours_sizes, key=lambda x: x[0])[1]
-   #define a mask
-   mask = np.zeros(image.shape, np.uint8)
-   cv2.drawContours(mask,[biggest_contour], -1, (0,255,0), 3)# 3=thickness, -1= draw all contours, 2nd arg must be a list 
-   return biggest_contour, mask
 
-def contour(image):
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    ret, threshold = cv2.threshold(image, 10, 255, cv2.THRESH_BINARY)
-    contours, hierarchy = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+def flood_fill(image):
+    # set values equal to or above 220 to 0
+    # set values below 220 to 255
+    threshold, image_threshold = cv2.threshold(image, 220, 255, cv2.THRESH_BINARY_INV);
 
-    epsilon = 0.1 * cv2.arcLength(contours[0], True)
-    approx = cv2.approxPolyDP(contours[0], epsilon, True)
+    # copy the thresholded image
+    image_floodfill = image_threshold.copy()
 
-    cv2.drawContours(image, approx, -1, (0, 255, 0), 3)
-    cv2.imshow("Contour", image)
+    # mask used to flood filling
+    # notice the size needs to be 2 pixels than the image
+    h, w = image_threshold.shape[:2]
+    mask = np.zeros((h+2, w+2), np.uint8)
 
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # floodfill from point (0, 0) - actually black border
+    cv2.floodFill(image_floodfill, mask, (0,0), 255);
 
+    # invert floodfilled image
+    image_floodfill_inv = cv2.bitwise_not(image_floodfill)
 
-def extractSkin2(image):
+    # combine the two images to get the foreground
+    image_out = image_threshold | image_floodfill_inv
+
+    # return images
+    return np.hstack((image_threshold, image_floodfill, image_floodfill_inv, image_out))
+
+def extractSkin3(image):
+
     img = image.copy()
 
-    # convert from BGR (opencv defatult) to HSV
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    # required, otherwise contours and flood fill stop too early
+    img = cv2.copyMakeBorder(img, 2, 2, 2, 2, cv2.BORDER_CONSTANT, value=(0, 0, 0))
 
-    # fixed V
-    img[:,:,2] = 180
-    img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
-            
-    cv2.imshow('fixed v', img)
-    cv2.waitKey(0); cv2.destroyAllWindows()
+    # converting from BGR to YCbCr color space
+    img_YCrCb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
 
-    # Applying Otsu's method setting the flag value into cv.THRESH_OTSU.
-    # Use a bimodal image as an input.
-    # Optimal threshold value is determined automatically.
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    otsu_threshold, mask = cv2.threshold(
-        img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU,
-    )
+    # skin color range for HSV color space 
+    YCrCb_mask = cv2.inRange(img_YCrCb, (0, 135, 85), (255, 180, 135)) 
+    YCrCb_mask = cv2.morphologyEx(YCrCb_mask, cv2.MORPH_OPEN, np.ones((3,3), np.uint8))
+    YCrCb_result = cv2.bitwise_not(YCrCb_mask)
 
-    # bluring image to improve masking
-    mask = cv2.GaussianBlur(mask, (3, 3), 0)
+    # get contours for image
+    contours, hierarchy = cv2.findContours(YCrCb_result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Extracting skin from the threshold mask
-    skin = cv2.bitwise_and(img, img, mask=mask)
+    # get the biggest contour
+    # cont_max = max(contours, key=cv2.contourArea)
+    cont_top = sorted(contours, key=cv2.contourArea, reverse=True)[0]
+    # cv2.drawContours(img, cont_max, -1, (0,255,0), 3)
 
+    # return result
+    return YCrCb_result
 
-    # img = cv2.equalizeHist(img)
-    # cv2.imshow('histo equalization', img)
-    # cv2.waitKey(0); cv2.destroyAllWindows()
+    # cv2.imshow("contour", img)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
-    # print("Obtained threshold: ", otsu_threshold)
-    # cv2.imshow("otsu", otsu_img)
-    # cv2.waitKey(0); cv2.destroyAllWindows()
-
-    # return image of skin
-    return mask
-
-def thresh_callback(val, image):
-
-    src_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    threshold = val
-    # # Detect edges using Canny
-    canny_output = cv2.Canny(src_gray, threshold, threshold * 2)
-    # Find contours
-    contours, hierarchy = cv2.findContours(canny_output, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    # Find the convex hull object for each contour
-    hull_list = []
-    for i in range(len(contours)):
-        hull = cv2.convexHull(contours[i])
-        hull_list.append(hull)
-    # Draw contours + hull results
-    drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 3), dtype=np.uint8)
-    for i in range(len(contours)):
-        color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
-        cv2.drawContours(drawing, contours, i, color)
-        cv2.drawContours(drawing, hull_list, i, color)
-    # Show in a window
-
-    return drawing
 
 def bilateral_filtering(image):
-    # Converting the image to grayscale.
+    # converting the image to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Smoothing without removing edges.
+    # smoothing without removing edges
     gray_filtered = cv2.bilateralFilter(gray, 7, 50, 50)
 
-    # Applying the canny filter
+    # applying the canny filter
     edges = cv2.Canny(gray, 60, 120)
     edges_filtered = cv2.Canny(gray_filtered, 60, 120)
 
-    # Stacking the images to print them together for comparison
+    # stacking the images to print them together for comparison
     images = np.hstack((gray, edges, edges_filtered))
 
-    # Display the resulting frame
-    cv2.imshow('Frame', images)
+    # return resulting frame
+    return images
 
-# hsvTracker(img_path13)
+# main loop
+for image_name in images_names:
+    img = cv2.imread(images_dir + image_name)
 
-for image in images:
-    img = cv2.imread(mypath + image)
-    skin = extractSkin(img)
-    bilateral_filtering(skin)
-    # skin = extractSkin(img)
-    # cv2.imshow("skin", skin)
+    cv2.imshow("img", img)
     cv2.waitKey(0); cv2.destroyAllWindows()
-    # contour(skin)
 
-    # cv2.imshow("thresh", thresh_callback(100, skin))
+    skin = extractSkin3(img)
+    cv2.imshow("skin", skin)
+    cv2.waitKey(0); cv2.destroyAllWindows()
+
+    hand = flood_fill(skin)
+    cv2.imshow("floodfill", hand)
+    cv2.waitKey(0); cv2.destroyAllWindows()
+
+    # edges = bilateral_filtering(skin)
+    # cv2.imshow("edges", edges)
     # cv2.waitKey(0); cv2.destroyAllWindows()
-
 
 sys.exit()
 
@@ -335,3 +297,10 @@ sys.exit()
 # for i in range(rows):
 #     for j in range(cols):
 #         img[i,j] = img[i,j] * (v[i][j] / 255)
+
+
+# convert from BGR (opencv defatult) to HSV
+# img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+# fixed V
+# img[:,:,2] = 180
+# img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
