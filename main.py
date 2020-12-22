@@ -223,6 +223,8 @@ def flood_fill(image):
     # return images
     return np.hstack((image_threshold, image_floodfill, image_floodfill_inv, image_out))
 
+
+# https://github.com/CHEREF-Mehdi/SkinDetection/blob/master/SkinDetection.py
 def extractSkin3(image):
 
     img = image.copy()
