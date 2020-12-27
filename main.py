@@ -43,7 +43,7 @@ def equalizeHistogramRGB(image):
 
     return cv2.merge((output1_R, output1_G, output1_B))
 
-def extractSkin(image):
+def extractSkin2(image):
 
     img = image.copy()
 
@@ -220,12 +220,19 @@ def flood_fill(image):
     # combine the two images to get the foreground
     image_out = image_threshold | image_floodfill_inv
 
-    # return images
-    return np.hstack((image_threshold, image_floodfill, image_floodfill_inv, image_out))
+    cv2.imshow("floodfill", np.hstack((image_threshold, image_floodfill, image_floodfill_inv, image_out)))
+    cv2.waitKey(0); cv2.destroyAllWindows()
+
+    # delete previously created border
+    h, w = image_out.shape[:2]
+    borderless_img = image_out[2:h-2, 2:w-2]
+
+    # return mask
+    return borderless_img
 
 
 # https://github.com/CHEREF-Mehdi/SkinDetection/blob/master/SkinDetection.py
-def extractSkin3(image):
+def extractSkin(image):
 
     img = image.copy()
 
@@ -248,7 +255,7 @@ def extractSkin3(image):
     cont_top = sorted(contours, key=cv2.contourArea, reverse=True)[0]
     # cv2.drawContours(img, cont_max, -1, (0,255,0), 3)
 
-    # return result
+    # return mask
     return YCrCb_result
 
     # cv2.imshow("contour", img)
@@ -276,17 +283,58 @@ def bilateral_filtering(image):
 # main loop
 for image_name in images_names:
     img = cv2.imread(images_dir + image_name)
-
     cv2.imshow("img", img)
     cv2.waitKey(0); cv2.destroyAllWindows()
 
-    skin = extractSkin3(img)
-    cv2.imshow("skin", skin)
+    skin_mask = extractSkin(img)
+    # cv2.imshow("skin", skin_mask)
+    # cv2.waitKey(0); cv2.destroyAllWindows()
+
+    hand_mask = flood_fill(skin_mask)
+    cv2.imshow("floodfill", hand_mask)
     cv2.waitKey(0); cv2.destroyAllWindows()
 
-    hand = flood_fill(skin)
-    cv2.imshow("floodfill", hand)
+    # cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    hand = cv2.bitwise_and(img, img, mask=hand_mask)
+    cv2.imshow("hand", hand)
     cv2.waitKey(0); cv2.destroyAllWindows()
+
+
+    height, width, channels = hand.shape
+
+    src = cv2.medianBlur(hand, 21)
+    hsv = cv2.cvtColor(src, cv2.COLOR_BGR2HSV)
+    lower = np.array([0, 0, 131])
+    upper = np.array([62, 105, 255])
+    mask = cv2.inRange(hsv, lower, upper)
+    
+    mask = cv2.erode(mask, None, iterations=8)
+    mask = cv2.dilate(mask, None, iterations=8)
+
+    params = cv2.SimpleBlobDetector_Params()
+    params.filterByArea = True
+    params.minArea = int((height * width) / 500)
+    params.maxArea = int((height * width) / 10)
+    params.filterByCircularity = True
+    params.minCircularity = 0.5
+    params.filterByConvexity = True
+    params.minConvexity = 0.5
+    params.filterByInertia = True
+    params.minInertiaRatio = 0.01
+
+    detector = cv2.SimpleBlobDetector_create(params)
+    key_points = detector.detect(255 - mask)
+
+    vis = cv2.bitwise_and(hsv, hsv, mask=mask)
+    vis = cv2.addWeighted(src, 0.2, vis, 0.8, 0)
+    cv2.drawKeypoints(vis, key_points, vis, (0, 0, 255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    for kp in key_points:
+        cv2.drawMarker(vis, (int(kp.pt[0]), int(kp.pt[1])), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, thickness=3)
+
+    cv2.imshow("VIS", vis)
+    # cv2.imwrite('nails_detected.png', vis)
+    cv2.waitKey(0); cv2.destroyAllWindows()
+
 
     # edges = bilateral_filtering(skin)
     # cv2.imshow("edges", edges)
