@@ -43,42 +43,6 @@ def equalizeHistogramRGB(image):
 
     return cv2.merge((output1_R, output1_G, output1_B))
 
-def extractSkin2(image):
-
-    img = image.copy()
-
-    # equ = equalizeHistogramRGB(img)
-
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
-    # get HSV thresholds for skin tone in HSV
-    lower = np.array([0, 28, 80], dtype=np.uint8)
-    upper = np.array([20, 255, 255], dtype=np.uint8)
-
-    # img[:,:,2] = 180
-
-    # single channel mask, detect skin on the range of lower and upper pixel values in the HSV colorspace.
-    mask = cv2.inRange(img, lower, upper)
-
-    # bluring image to improve masking
-    # mask = cv2.GaussianBlur(mask, (3, 3), 0)
-    cv2.imshow("mask", mask)
-    cv2.waitKey(0); cv2.destroyAllWindows()
-    kclose = np.ones((3,3), dtype=np.uint8)
-    kopen = np.ones((3,3), dtype=np.uint8)
-
-
-    closing = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kclose, iterations=1)
-    cv2.imshow("closing", closing)
-    cv2.waitKey(0); cv2.destroyAllWindows()
-
-    # cv2.waitKey(0); cv2.destroyAllWindows()
-    # extracting skin from the threshold mask
-    skin = cv2.bitwise_and(img, img, mask=closing)
-
-    # return image of skin
-    return cv2.cvtColor(skin, cv2.COLOR_HSV2BGR)
-
 # INPUT: image in BGR
 # OUTPUT: 3D plot of RGB color space of an image
 def plot_rgb_3d(image):
@@ -220,8 +184,8 @@ def flood_fill(image):
     # combine the two images to get the foreground
     image_out = image_threshold | image_floodfill_inv
 
-    cv2.imshow("floodfill", np.hstack((image_threshold, image_floodfill, image_floodfill_inv, image_out)))
-    cv2.waitKey(0); cv2.destroyAllWindows()
+    # cv2.imshow("floodfill", np.hstack((image_threshold, image_floodfill, image_floodfill_inv, image_out)))
+    # cv2.waitKey(0); cv2.destroyAllWindows()
 
     # delete previously created border
     h, w = image_out.shape[:2]
@@ -247,20 +211,8 @@ def extractSkin(image):
     YCrCb_mask = cv2.morphologyEx(YCrCb_mask, cv2.MORPH_OPEN, np.ones((3,3), np.uint8))
     YCrCb_result = cv2.bitwise_not(YCrCb_mask)
 
-    # get contours for image
-    contours, hierarchy = cv2.findContours(YCrCb_result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    # get the biggest contour
-    # cont_max = max(contours, key=cv2.contourArea)
-    cont_top = sorted(contours, key=cv2.contourArea, reverse=True)[0]
-    # cv2.drawContours(img, cont_max, -1, (0,255,0), 3)
-
     # return mask
     return YCrCb_result
-
-    # cv2.imshow("contour", img)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
 
 
 def bilateral_filtering(image):
@@ -286,31 +238,37 @@ for image_name in images_names:
     cv2.imshow("img", img)
     cv2.waitKey(0); cv2.destroyAllWindows()
 
-    skin_mask = extractSkin(img)
-    # cv2.imshow("skin", skin_mask)
-    # cv2.waitKey(0); cv2.destroyAllWindows()
-
-    hand_mask = flood_fill(skin_mask)
+    # get hand mask
+    hand_mask = flood_fill(extractSkin(img))
     cv2.imshow("floodfill", hand_mask)
     cv2.waitKey(0); cv2.destroyAllWindows()
 
-    # cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # use hand mask on the original image to get hand
     hand = cv2.bitwise_and(img, img, mask=hand_mask)
     cv2.imshow("hand", hand)
     cv2.waitKey(0); cv2.destroyAllWindows()
 
-
+    # get image properties
     height, width, channels = hand.shape
 
+    # blur hand
     src = cv2.medianBlur(hand, 21)
-    hsv = cv2.cvtColor(src, cv2.COLOR_BGR2HSV)
-    lower = np.array([0, 0, 131])
-    upper = np.array([62, 105, 255])
-    mask = cv2.inRange(hsv, lower, upper)
-    
-    mask = cv2.erode(mask, None, iterations=8)
-    mask = cv2.dilate(mask, None, iterations=8)
+    cv2.imshow("src", src)
+    cv2.waitKey(0); cv2.destroyAllWindows()
 
+    # convert to HSV
+    hsv = cv2.cvtColor(src, cv2.COLOR_BGR2HSV)
+    cv2.imshow("hsv", hsv)
+    cv2.waitKey(0); cv2.destroyAllWindows()
+
+    # get pinkish color
+    lower = np.array([80, 0, 131])
+    upper = np.array([180, 105, 255])
+    mask = cv2.inRange(hsv, lower, upper)
+    cv2.imshow("mask", mask)
+    cv2.waitKey(0); cv2.destroyAllWindows()
+
+    # create blob detector params object and set its parameters (we want circular/convex object)
     params = cv2.SimpleBlobDetector_Params()
     params.filterByArea = True
     params.minArea = int((height * width) / 500)
@@ -322,23 +280,26 @@ for image_name in images_names:
     params.filterByInertia = True
     params.minInertiaRatio = 0.01
 
+    # create blob detector object and pass params
     detector = cv2.SimpleBlobDetector_create(params)
     key_points = detector.detect(255 - mask)
 
     vis = cv2.bitwise_and(hsv, hsv, mask=mask)
+    cv2.imshow("vis", vis)
+    cv2.waitKey(0); cv2.destroyAllWindows()
+
     vis = cv2.addWeighted(src, 0.2, vis, 0.8, 0)
+    cv2.imshow("vis", vis)
+    cv2.waitKey(0); cv2.destroyAllWindows()
+
+    # drawing keypoints
     cv2.drawKeypoints(vis, key_points, vis, (0, 0, 255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     for kp in key_points:
         cv2.drawMarker(vis, (int(kp.pt[0]), int(kp.pt[1])), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, thickness=3)
 
     cv2.imshow("VIS", vis)
-    # cv2.imwrite('nails_detected.png', vis)
     cv2.waitKey(0); cv2.destroyAllWindows()
 
-
-    # edges = bilateral_filtering(skin)
-    # cv2.imshow("edges", edges)
-    # cv2.waitKey(0); cv2.destroyAllWindows()
 
 sys.exit()
 
@@ -354,3 +315,10 @@ sys.exit()
 # fixed V
 # img[:,:,2] = 180
 # img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
+
+# get contours for image
+# contours, hierarchy = cv2.findContours(YCrCb_result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+# get the biggest contour
+# cont_max = max(contours, key=cv2.contourArea)
+# cont_top = sorted(contours, key=cv2.contourArea, reverse=True)[0]
+# cv2.drawContours(img, cont_max, -1, (0,255,0), 3)
