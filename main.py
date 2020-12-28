@@ -1,17 +1,16 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 import sys
 from os import listdir
 from os.path import isfile, join
-import random as rng
-from scipy.interpolate import splprep, splev
-
+from sklearn.metrics import jaccard_score
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib import colors
-import matplotlib.pyplot as plt
 
 images_dir = 'nails_segmentation/images/'
+labels_dir = 'nails_segmentation/labels/'
 images_names = [f for f in listdir(images_dir) if isfile(join(images_dir, f))]
 
 # some particular images
@@ -232,76 +231,133 @@ def bilateral_filtering(image):
     # return resulting frame
     return images
 
+def iou_score(label, image):
+
+    # convert label to grayscale
+    label = label.copy()
+    label = cv2.cvtColor(label, cv2.COLOR_BGR2GRAY)
+
+    intersection = np.logical_and(label, image)
+    union = np.logical_or(label, image)
+    iou_score = np.sum(intersection) / np.sum(union)
+
+    return iou_score
+
+def test():
+    avg = 0
+    cnt = 0
+    n = 0
+    for image_name in images_names:
+        n += 1
+        label = cv2.imread(labels_dir + image_name)
+        img = cv2.imread(images_dir + image_name)
+        hand_mask = flood_fill(extractSkin(img))
+        hand = cv2.bitwise_and(img, img, mask=hand_mask)
+        src = cv2.medianBlur(hand, 21)
+        hsv = cv2.cvtColor(src, cv2.COLOR_BGR2HSV)
+        lower = np.array([80, 0, 131])
+        upper = np.array([180, 105, 255])
+        mask1 = cv2.inRange(hsv, lower, upper)
+
+        # lower = np.array([0, 0, 180])
+        # upper = np.array([10, 94, 255])
+        # mask2 = cv2.inRange(hsv, lower, upper)
+
+        mask = mask1 
+
+        iou = iou_score(label, mask)
+        print(f"{image_name}: {iou}")
+        cnt += iou
+    avg = cnt / n
+    print(f"average: {avg}")
+
+
+
 # main loop
-for image_name in images_names:
-    img = cv2.imread(images_dir + image_name)
-    cv2.imshow("img", img)
-    cv2.waitKey(0); cv2.destroyAllWindows()
 
-    # get hand mask
-    hand_mask = flood_fill(extractSkin(img))
-    cv2.imshow("floodfill", hand_mask)
-    cv2.waitKey(0); cv2.destroyAllWindows()
+def main():
+    for image_name in images_names:
+        label = cv2.imread(labels_dir + image_name)
+        img = cv2.imread(images_dir + image_name)
+        cv2.imshow("img", img)
+        cv2.waitKey(0); cv2.destroyAllWindows()
+        cv2.imshow("label", label)
+        cv2.waitKey(0); cv2.destroyAllWindows()
 
-    # use hand mask on the original image to get hand
-    hand = cv2.bitwise_and(img, img, mask=hand_mask)
-    cv2.imshow("hand", hand)
-    cv2.waitKey(0); cv2.destroyAllWindows()
+        # get hand mask
+        hand_mask = flood_fill(extractSkin(img))
+        cv2.imshow("floodfill", hand_mask)
+        cv2.waitKey(0); cv2.destroyAllWindows()
 
-    # get image properties
-    height, width, channels = hand.shape
+        # use hand mask on the original image to get hand
+        hand = cv2.bitwise_and(img, img, mask=hand_mask)
+        cv2.imshow("hand", hand)
+        cv2.waitKey(0); cv2.destroyAllWindows()
 
-    # blur hand
-    src = cv2.medianBlur(hand, 21)
-    cv2.imshow("src", src)
-    cv2.waitKey(0); cv2.destroyAllWindows()
+        # get image properties
+        # height, width, channels = hand.shape
 
-    # convert to HSV
-    hsv = cv2.cvtColor(src, cv2.COLOR_BGR2HSV)
-    cv2.imshow("hsv", hsv)
-    cv2.waitKey(0); cv2.destroyAllWindows()
+        # blur hand
+        src = cv2.medianBlur(hand, 21)
+        cv2.imshow("src", src)
+        cv2.waitKey(0); cv2.destroyAllWindows()
 
-    # get pinkish color
-    lower = np.array([80, 0, 131])
-    upper = np.array([180, 105, 255])
-    mask = cv2.inRange(hsv, lower, upper)
-    cv2.imshow("mask", mask)
-    cv2.waitKey(0); cv2.destroyAllWindows()
+        # convert to HSV
+        hsv = cv2.cvtColor(src, cv2.COLOR_BGR2HSV)
+        cv2.imshow("hsv", hsv)
+        cv2.waitKey(0); cv2.destroyAllWindows()
 
-    # create blob detector params object and set its parameters (we want circular/convex object)
-    params = cv2.SimpleBlobDetector_Params()
-    params.filterByArea = True
-    params.minArea = int((height * width) / 500)
-    params.maxArea = int((height * width) / 10)
-    params.filterByCircularity = True
-    params.minCircularity = 0.5
-    params.filterByConvexity = True
-    params.minConvexity = 0.5
-    params.filterByInertia = True
-    params.minInertiaRatio = 0.01
+        # get pinkish color
+        lower = np.array([80, 0, 131])
+        upper = np.array([180, 105, 255])
+        mask1 = cv2.inRange(hsv, lower, upper)
 
-    # create blob detector object and pass params
-    detector = cv2.SimpleBlobDetector_create(params)
-    key_points = detector.detect(255 - mask)
+        # lower = np.array([0, 0, 180])
+        # upper = np.array([10, 94, 255])
+        # mask2 = cv2.inRange(hsv, lower, upper)
 
-    vis = cv2.bitwise_and(hsv, hsv, mask=mask)
-    cv2.imshow("vis", vis)
-    cv2.waitKey(0); cv2.destroyAllWindows()
+        mask = mask1 
+        cv2.imshow("mask", mask)
+        cv2.waitKey(0); cv2.destroyAllWindows()
 
-    vis = cv2.addWeighted(src, 0.2, vis, 0.8, 0)
-    cv2.imshow("vis", vis)
-    cv2.waitKey(0); cv2.destroyAllWindows()
+        # create blob detector params object and set its parameters (we want circular/convex object)
+        # params = cv2.SimpleBlobDetector_Params()
+        # params.filterByArea = True
+        # params.minArea = int((height * width) / 500)
+        # params.maxArea = int((height * width) / 10)
+        # params.filterByCircularity = True
+        # params.minCircularity = 0.5
+        # params.filterByConvexity = True
+        # params.minConvexity = 0.5
+        # params.filterByInertia = True
+        # params.minInertiaRatio = 0.05
 
-    # drawing keypoints
-    cv2.drawKeypoints(vis, key_points, vis, (0, 0, 255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-    for kp in key_points:
-        cv2.drawMarker(vis, (int(kp.pt[0]), int(kp.pt[1])), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, thickness=3)
+        # # create blob detector object and pass params
+        # detector = cv2.SimpleBlobDetector_create(params)
+        # key_points = detector.detect(255 - mask)
 
-    cv2.imshow("VIS", vis)
-    cv2.waitKey(0); cv2.destroyAllWindows()
+        # vis = cv2.bitwise_and(hsv, hsv, mask=mask)
+        # cv2.imshow("vis", vis)
+        # cv2.waitKey(0); cv2.destroyAllWindows()
 
+        # vis = cv2.addWeighted(src, 0.2, vis, 0.8, 0)
+        # cv2.imshow("vis", vis)
+        # cv2.waitKey(0); cv2.destroyAllWindows()
+
+        # # drawing keypoints
+        # cv2.drawKeypoints(vis, key_points, vis, (0, 0, 255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        # for kp in key_points:
+        #     cv2.drawMarker(vis, (int(kp.pt[0]), int(kp.pt[1])), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, thickness=3)
+
+        # cv2.imshow("VIS", vis)
+        # cv2.waitKey(0); cv2.destroyAllWindows()
+
+        print(f"{image_name}: {iou_score(label, mask)}")
+
+test()
 
 sys.exit()
+
 
 # modify V values
 # rows,cols,pix = img.shape
