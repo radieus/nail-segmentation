@@ -211,6 +211,17 @@ def extractSkin(image):
     # return mask
     return YCrCb_result
 
+# x1, y1 should be a fingertip, x2, y2 are coords of the centroid
+def get_circle_coords(x1, y1, x2, y2, distance):
+
+    dist_btw_points = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+    distance_ratio = distance / dist_btw_points
+    x = x1 + distance_ratio * (x2 - x1)
+    y = y1 + distance_ratio * (y2 - y1)
+
+    return x, y
+
 def iou_score(label, image):
 
     # operate on a copy
@@ -227,9 +238,26 @@ def iou_score(label, image):
     # return score
     return iou_score
 
+def dice_score(image, label):
+    # operate on a copy
+    label = label.copy()
+
+    # convert label to grayscale
+    label = cv2.cvtColor(label, cv2.COLOR_BGR2GRAY)
+
+    #calculate IoU
+    intersection = np.logical_and(label, image)
+    union = np.logical_or(label, image)
+    iou_score = 2* np.sum(intersection) / np.sum(union)
+
+    # return score
+    return iou_score
+
 def test():
-    avg = 0
-    cnt = 0
+    avg_iou = 0
+    avg_dice = 0
+    cnt_dice = 0
+    cnt_iou = 0
     n = 0
     for image_name in images_names:
         n += 1
@@ -258,10 +286,49 @@ def test():
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close, iterations=3)
 
         iou = iou_score(label, mask)
-        print(f"{image_name}: {iou}")
-        cnt += iou
-    avg = cnt / n
-    print(f"average: {avg}")
+
+        if iou < 0.05:
+            # EXPERIMENTAL
+            # get contours for image and get the biggest contour
+            gray = cv2.cvtColor(hand, cv2.COLOR_BGR2GRAY)
+            contours, hierarchy = cv2.findContours(gray, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            cont_max = max(contours, key=cv2.contourArea)
+            cv2.drawContours(hand, cont_max, -1, (0,255,0), 3)
+
+            # get convex hull for contour
+            hull = cv2.convexHull(cont_max)
+            cv2.drawContours(hand, [hull], -1, (0, 255, 255), 2)
+
+            # compute the center of the contour
+            M = cv2.moments(cont_max)
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            cv2.circle(hand, (cX, cY), 7, (255, 255, 255), -1)
+
+            height, width, channels = hand.shape
+
+            # create black image for drawing circles
+            blank = hand.copy()
+            blank[:, :, :] = [0, 0, 0]
+            for p in hull:
+                x = p[0][0]
+                y = p[0][1]
+                dist = height * width / 15000
+                dot_radius = height * width / 15000
+                a, b = get_circle_coords(x, y, cX, cY, dist)
+                cv2.circle((blank), (int(a), int(b)), int(dot_radius), (255, 255, 255), -1)
+
+            blank = cv2.cvtColor(blank, cv2.COLOR_BGR2GRAY)
+            iou = iou_score(label, blank)
+            dice = dice_score(blank, label)
+
+        print(f"{image_name}: {str(round(iou, 2))}, {str(round(dice, 2))}")
+        cnt_iou += iou
+        cnt_dice += dice
+    avg_iou = cnt_iou / n
+    avg_dice = cnt_dice / n
+
+    print(f"average iou: {avg_iou}, average dice: {avg_dice}")
 
 # main loop
 def main():
@@ -276,20 +343,16 @@ def main():
 
         # get hand mask
         hand_mask = flood_fill(skin)
-        show("hand_mask1", hand_mask)
+        show("hand_mask", hand_mask)
 
         # use hand mask on the original image to get hand
         hand = cv2.bitwise_and(img, img, mask=hand_mask)
         show("hand", hand)
 
-        # blur hand
-        hand = cv2.medianBlur(hand, 21)
-        show("hand", hand)
-
         # convert to HSV
         hsv = cv2.cvtColor(hand, cv2.COLOR_BGR2HSV)
         show("hsv", hsv)
-
+ 
         # get purplish colour
         lower = np.array([80, 0, 113])
         upper = np.array([180, 105, 255])
@@ -308,62 +371,50 @@ def main():
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close, iterations=3)
         show("mask", np.hstack((mask, cv2.cvtColor(label, cv2.COLOR_BGR2GRAY))))
         
-        # get image properties
-        # height, width, channels = hand.shape
+        iou = iou_score(label, mask)
 
-        # create blob detector params object and set its parameters (we want circular/convex object)
-        # params = cv2.SimpleBlobDetector_Params()
-        # params.filterByArea = True
-        # params.minArea = int((height * width) / 500)
-        # params.maxArea = int((height * width) / 10)
-        # params.filterByCircularity = True
-        # params.minCircularity = 0.5
-        # params.filterByConvexity = True
-        # params.minConvexity = 0.5
-        # params.filterByInertia = True
-        # params.minInertiaRatio = 0.05
+        # EXPERIMENTAL
+        if iou == 0.0:
+            # get contours for image and get the biggest contour
+            gray = cv2.cvtColor(hand, cv2.COLOR_BGR2GRAY)
+            contours, hierarchy = cv2.findContours(gray, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            cont_max = max(contours, key=cv2.contourArea)
+            cv2.drawContours(hand, cont_max, -1, (0,255,0), 3)
+            show("contours", hand)
 
-        # # create blob detector object and pass params
-        # detector = cv2.SimpleBlobDetector_create(params)
-        # key_points = detector.detect(255 - mask)
+            # get convex hull for contour
+            hull = cv2.convexHull(cont_max)
+            cv2.drawContours(hand, [hull], -1, (0, 255, 255), 2)
+            show("contours", hand)
 
-        # vis = cv2.bitwise_and(hsv, hsv, mask=mask)
-        # cv2.imshow("vis", vis)
-        # cv2.waitKey(0); cv2.destroyAllWindows()
+            # compute the center of the contour
+            M = cv2.moments(cont_max)
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            cv2.circle(hand, (cX, cY), 7, (255, 255, 255), -1)
 
-        # vis = cv2.addWeighted(src, 0.2, vis, 0.8, 0)
-        # cv2.imshow("vis", vis)
-        # cv2.waitKey(0); cv2.destroyAllWindows()
+            height, width, channels = hand.shape
 
-        # # drawing keypoints
-        # cv2.drawKeypoints(vis, key_points, vis, (0, 0, 255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-        # for kp in key_points:
-        #     cv2.drawMarker(vis, (int(kp.pt[0]), int(kp.pt[1])), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, thickness=3)
+            # create black image for drawing circles
+            blank = hand.copy()
+            blank[:, :, :] = [0, 0, 0]
+            fds = 0
+            for p in hull:
+                x = p[0][0]
+                y = p[0][1]
+                dist = height * width / 15000
+                dot_radius = height * width / 15000
+                a, b = get_circle_coords(x, y, cX, cY, dist)
+                cv2.circle((blank), (int(a), int(b)), int(dot_radius), (255, 255, 255), -1)
 
-        # cv2.imshow("VIS", vis)
-        # cv2.waitKey(0); cv2.destroyAllWindows()
+            show("hull", np.hstack((hand, label)))
+            show("hull", np.hstack((blank, label)))
 
-        print(f"{image_name}: {iou_score(label, mask)}")
+            blank = cv2.cvtColor(blank, cv2.COLOR_BGR2GRAY)
+            iou = iou_score(label, blank)
 
-# test()
-main()
+        print(f"{image_name}: {iou}")
+
+test()
+#main()
 sys.exit()
-
-# modify V values
-# rows,cols,pix = img.shape
-# for i in range(rows):
-#     for j in range(cols):
-#         img[i,j] = img[i,j] * (v[i][j] / 255)
-
-# convert from BGR (opencv defatult) to HSV
-# img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-# fixed V
-# img[:,:,2] = 180
-# img = cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
-
-# get contours for image
-# contours, hierarchy = cv2.findContours(YCrCb_result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-# get the biggest contour
-# cont_max = max(contours, key=cv2.contourArea)
-# cont_top = sorted(contours, key=cv2.contourArea, reverse=True)[0]
-# cv2.drawContours(img, cont_max, -1, (0,255,0), 3)
