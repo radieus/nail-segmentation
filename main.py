@@ -13,7 +13,7 @@ images_dir = 'nails_segmentation/images/'
 labels_dir = 'nails_segmentation/labels/'
 images_names = [f for f in listdir(images_dir) if isfile(join(images_dir, f))]
 
-# some particular images
+# some images
 img_path1 = 'nails_segmentation/images/1eecab90-1a92-43a7-b952-0204384e1fae.jpg'
 img_path2 = 'nails_segmentation/images/2C29D473-CCB4-458C-926B-99D0042161E6.jpg'
 img_path3 = 'nails_segmentation/images/2c376c66-9823-4874-869e-1e7f5c54ec7b.jpg'
@@ -33,14 +33,11 @@ img_path16 = 'nails_segmentation/images/a3a73edd-1483-4413-addb-9a7264b5d853.jpg
 img_path17 = 'nails_segmentation/images/d6072ec6-db67-11e8-9658-0242ac1c0002.jpg'
 img_path18 = 'nails_segmentation/images/d633f320-db67-11e8-9658-0242ac1c0002.jpg'
 
-def equalizeHistogramRGB(image):
-    R, G, B = cv2.split(img)
 
-    output1_R = cv2.equalizeHist(R)
-    output1_G = cv2.equalizeHist(G)
-    output1_B = cv2.equalizeHist(B)
-
-    return cv2.merge((output1_R, output1_G, output1_B))
+# showing images
+def show(window_name, image):
+    cv2.imshow(window_name, image)
+    cv2.waitKey(0); cv2.destroyAllWindows()
 
 # INPUT: image in BGR
 # OUTPUT: 3D plot of RGB color space of an image
@@ -162,29 +159,27 @@ def hsvTracker(path):
 
 # https://www.learnopencv.com/filling-holes-in-an-image-using-opencv-python-c/
 def flood_fill(image):
-    # set values equal to or above 220 to 0
-    # set values below 220 to 255
+
+    # invert the image mask
     threshold, image_threshold = cv2.threshold(image, 220, 255, cv2.THRESH_BINARY_INV);
 
-    # copy the thresholded image
+    # operate on a copy of image mask
     image_floodfill = image_threshold.copy()
 
-    # mask used to flood filling
-    # notice the size needs to be 2 pixels than the image
+    # mask used to flood-filling
     h, w = image_threshold.shape[:2]
     mask = np.zeros((h+2, w+2), np.uint8)
 
-    # floodfill from point (0, 0) - actually black border
+    # flood-fill from seed (0, 0) - actually black border
     cv2.floodFill(image_floodfill, mask, (0,0), 255);
 
-    # invert floodfilled image
+    # invert flood-filled image
     image_floodfill_inv = cv2.bitwise_not(image_floodfill)
 
     # combine the two images to get the foreground
     image_out = image_threshold | image_floodfill_inv
 
-    # cv2.imshow("floodfill", np.hstack((image_threshold, image_floodfill, image_floodfill_inv, image_out)))
-    # cv2.waitKey(0); cv2.destroyAllWindows()
+    # show("floodfill", np.hstack((image_threshold, image_floodfill, image_floodfill_inv, image_out)))
 
     # delete previously created border
     h, w = image_out.shape[:2]
@@ -197,50 +192,39 @@ def flood_fill(image):
 # https://github.com/CHEREF-Mehdi/SkinDetection/blob/master/SkinDetection.py
 def extractSkin(image):
 
+    # operate on a copy
     img = image.copy()
 
-    # required, otherwise contours and flood fill stop too early
+    # required, otherwise contours/flood-fill will stop too early
     img = cv2.copyMakeBorder(img, 2, 2, 2, 2, cv2.BORDER_CONSTANT, value=(0, 0, 0))
 
     # converting from BGR to YCbCr color space
-    img_YCrCb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
-
-    # skin color range for HSV color space 
-    YCrCb_mask = cv2.inRange(img_YCrCb, (0, 135, 85), (255, 180, 135)) 
+    img_YCrCb = cv2.cvtColor(img, cv2.COLOR_BGR2YCR_CB)
+    
+    # skin color range for YCrCb color space 
+    lower = (0, 135, 85)
+    upper = (255, 180, 135)
+    YCrCb_mask = cv2.inRange(img_YCrCb, lower, upper) 
     YCrCb_mask = cv2.morphologyEx(YCrCb_mask, cv2.MORPH_OPEN, np.ones((3,3), np.uint8))
     YCrCb_result = cv2.bitwise_not(YCrCb_mask)
 
     # return mask
     return YCrCb_result
 
-
-def bilateral_filtering(image):
-    # converting the image to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # smoothing without removing edges
-    gray_filtered = cv2.bilateralFilter(gray, 7, 50, 50)
-
-    # applying the canny filter
-    edges = cv2.Canny(gray, 60, 120)
-    edges_filtered = cv2.Canny(gray_filtered, 60, 120)
-
-    # stacking the images to print them together for comparison
-    images = np.hstack((gray, edges, edges_filtered))
-
-    # return resulting frame
-    return images
-
 def iou_score(label, image):
 
-    # convert label to grayscale
+    # operate on a copy
     label = label.copy()
+
+    # convert label to grayscale
     label = cv2.cvtColor(label, cv2.COLOR_BGR2GRAY)
 
+    #calculate IoU
     intersection = np.logical_and(label, image)
     union = np.logical_or(label, image)
     iou_score = np.sum(intersection) / np.sum(union)
 
+    # return score
     return iou_score
 
 def test():
@@ -255,15 +239,23 @@ def test():
         hand = cv2.bitwise_and(img, img, mask=hand_mask)
         src = cv2.medianBlur(hand, 21)
         hsv = cv2.cvtColor(src, cv2.COLOR_BGR2HSV)
-        lower = np.array([80, 0, 131])
+
+        # purplish
+        lower = np.array([80, 0, 113])
         upper = np.array([180, 105, 255])
         mask1 = cv2.inRange(hsv, lower, upper)
 
-        # lower = np.array([0, 0, 180])
-        # upper = np.array([10, 94, 255])
-        # mask2 = cv2.inRange(hsv, lower, upper)
+        # orangish
+        lower = np.array([0, 0, 180])
+        upper = np.array([7, 94, 255])
+        mask2 = cv2.inRange(hsv, lower, upper)
 
-        mask = mask1 
+        mask = mask1 | mask2
+
+        kernel_open = np.ones((4,4),np.uint8)
+        kernel_close = np.ones((7,7),np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close, iterations=3)
 
         iou = iou_score(label, mask)
         print(f"{image_name}: {iou}")
@@ -271,54 +263,47 @@ def test():
     avg = cnt / n
     print(f"average: {avg}")
 
-
-
 # main loop
-
 def main():
     for image_name in images_names:
         label = cv2.imread(labels_dir + image_name)
         img = cv2.imread(images_dir + image_name)
-        cv2.imshow("img", img)
-        cv2.waitKey(0); cv2.destroyAllWindows()
-        cv2.imshow("label", label)
-        cv2.waitKey(0); cv2.destroyAllWindows()
+        show("img", img)
+
+        # get skin
+        skin = extractSkin(img)
+        show("skin", (255-skin))
 
         # get hand mask
-        hand_mask = flood_fill(extractSkin(img))
-        cv2.imshow("floodfill", hand_mask)
-        cv2.waitKey(0); cv2.destroyAllWindows()
+        hand_mask = flood_fill(skin)
+        show("hand_mask1", hand_mask)
 
         # use hand mask on the original image to get hand
         hand = cv2.bitwise_and(img, img, mask=hand_mask)
-        cv2.imshow("hand", hand)
-        cv2.waitKey(0); cv2.destroyAllWindows()
-
-        # get image properties
-        # height, width, channels = hand.shape
+        show("hand", hand)
 
         # blur hand
-        src = cv2.medianBlur(hand, 21)
-        cv2.imshow("src", src)
-        cv2.waitKey(0); cv2.destroyAllWindows()
+        hand = cv2.medianBlur(hand, 21)
+        show("hand", hand)
 
         # convert to HSV
-        hsv = cv2.cvtColor(src, cv2.COLOR_BGR2HSV)
-        cv2.imshow("hsv", hsv)
-        cv2.waitKey(0); cv2.destroyAllWindows()
+        hsv = cv2.cvtColor(hand, cv2.COLOR_BGR2HSV)
+        show("hsv", hsv)
 
         # get pinkish color
-        lower = np.array([80, 0, 131])
+        lower = np.array([70, 0, 131])
         upper = np.array([180, 105, 255])
         mask1 = cv2.inRange(hsv, lower, upper)
 
-        # lower = np.array([0, 0, 180])
-        # upper = np.array([10, 94, 255])
-        # mask2 = cv2.inRange(hsv, lower, upper)
+        lower = np.array([0, 0, 180])
+        upper = np.array([7, 94, 255])
+        mask2 = cv2.inRange(hsv, lower, upper)
 
-        mask = mask1 
-        cv2.imshow("mask", mask)
-        cv2.waitKey(0); cv2.destroyAllWindows()
+        mask = mask1 | mask2
+        show("mask", mask)
+
+        # get image properties
+        # height, width, channels = hand.shape
 
         # create blob detector params object and set its parameters (we want circular/convex object)
         # params = cv2.SimpleBlobDetector_Params()
@@ -355,16 +340,14 @@ def main():
         print(f"{image_name}: {iou_score(label, mask)}")
 
 test()
-
+# main()
 sys.exit()
-
 
 # modify V values
 # rows,cols,pix = img.shape
 # for i in range(rows):
 #     for j in range(cols):
 #         img[i,j] = img[i,j] * (v[i][j] / 255)
-
 
 # convert from BGR (opencv defatult) to HSV
 # img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
