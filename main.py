@@ -290,18 +290,24 @@ def main():
         hsv = cv2.cvtColor(hand, cv2.COLOR_BGR2HSV)
         show("hsv", hsv)
 
-        # get pinkish color
-        lower = np.array([70, 0, 131])
+        # get purplish colour
+        lower = np.array([80, 0, 113])
         upper = np.array([180, 105, 255])
         mask1 = cv2.inRange(hsv, lower, upper)
 
+        # get orangish colour
         lower = np.array([0, 0, 180])
         upper = np.array([7, 94, 255])
         mask2 = cv2.inRange(hsv, lower, upper)
 
         mask = mask1 | mask2
-        show("mask", mask)
 
+        kernel_open = np.ones((4,4),np.uint8)
+        kernel_close = np.ones((7,7),np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close, iterations=3)
+        show("mask", np.hstack((mask, cv2.cvtColor(label, cv2.COLOR_BGR2GRAY))))
+        
         # get image properties
         # height, width, channels = hand.shape
 
@@ -339,8 +345,8 @@ def main():
 
         print(f"{image_name}: {iou_score(label, mask)}")
 
-test()
-# main()
+# test()
+main()
 sys.exit()
 
 # modify V values
