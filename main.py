@@ -283,7 +283,6 @@ def test():
         kernel_close = np.ones((7,7),np.uint8)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open, iterations=1)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close, iterations=3)
-        cv2.imwrite(f"{image_name}", mask)
 
         iou = iou_score(label, mask)
 
@@ -319,7 +318,6 @@ def test():
                 cv2.circle((blank), (int(a), int(b)), int(dot_radius), (255, 255, 255), -1)
 
             blank = cv2.cvtColor(blank, cv2.COLOR_BGR2GRAY)
-            cv2.imwrite(f"{image_name}", blank)
             iou = iou_score(label, blank)
             dice = dice_score(blank, label)
 
